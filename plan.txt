@@ -1,0 +1,234 @@
+# Person Detection, Tracking & Re-Identification System Architecture
+
+## 1. System Overview
+
+### Core Components
+- **Detection Engine**: YOLOv8m for person detection
+- **Tracking Engine**: ByteTrack for multi-object tracking
+- **Re-ID Engine**: OSNet for person re-identification
+- **Global ID Management**: Custom GID assignment and management system
+- **Video Processing**: Multi-camera video input handling
+
+### Pipeline Flow
+```
+Video Input → Person Detection → Object Tracking → Feature Extraction → Re-ID Matching → GID Assignment → Output
+```
+
+## 2. Detailed Architecture
+
+### 2.1 Input Handler Module
+**Purpose**: Manage multiple video inputs and frame synchronization
+
+**Components**:
+- Video reader for .mp4 files (OpenCV VideoCapture)
+- Frame buffer management for smooth processing
+- Multi-threading support for concurrent video processing
+- Frame rate synchronization across cameras
+- GPU/CPU memory management
+
+**Key Features**:
+- Support for 2-3 simultaneous video streams
+- Configurable frame skip for performance optimization
+- Automatic resolution adjustment
+- Error handling for corrupted frames
+
+### 2.2 Detection Module (YOLOv8m)
+**Purpose**: Detect persons in each frame with high accuracy
+
+**Implementation Details**:
+- YOLOv8m model loading with configurable device (CPU/GPU)
+- Batch processing for multiple frames
+- Confidence threshold filtering (default: 0.5)
+- Non-Maximum Suppression (NMS) for overlapping detections
+- Bounding box coordinate normalization
+
+**Output Format**:
+```
+Detection = {
+    'bbox': [x1, y1, x2, y2],
+    'confidence': float,
+    'class_id': int (person class),
+    'frame_id': int,
+    'camera_id': int
+}
+```
+
+### 2.3 Tracking Module (ByteTrack)
+**Purpose**: Maintain temporal consistency of detected persons
+
+**Core Features**:
+- Multi-object tracking with ID assignment
+- Handling of occlusions and temporary disappearances
+- Track state management (confirmed, tentative, deleted)
+- Kalman filter for motion prediction
+- Association cost matrix computation
+
+**Track States**:
+- **New**: Newly detected objects
+- **Tracked**: Successfully associated objects
+- **Lost**: Temporarily lost objects (kept for re-association)
+- **Removed**: Permanently removed objects
+
+**Output Format**:
+```
+Track = {
+    'track_id': int,
+    'bbox': [x1, y1, x2, y2],
+    'state': str,
+    'age': int,
+    'time_since_update': int,
+    'camera_id': int,
+    'frame_id': int
+}
+```
+
+### 2.4 Feature Extraction Module (OSNet)
+**Purpose**: Extract discriminative features for person re-identification
+
+**Implementation**:
+- OSNet model loading with GPU/CPU support
+- Crop extraction from person bounding boxes
+- Image preprocessing (resize, normalize)
+- Feature vector extraction (512-dimensional embeddings)
+- Feature normalization for distance computation
+
+**Processing Pipeline**:
+1. Crop person region from full frame
+2. Resize to OSNet input size (256x128)
+3. Apply data augmentation if needed
+4. Extract feature embeddings
+5. L2 normalize feature vectors
+
+### 2.5 Re-Identification Engine
+**Purpose**: Match persons across frames and cameras using feature similarity
+
+**Matching Strategy**:
+- Cosine similarity computation between feature vectors
+- Similarity threshold-based matching (default: 0.7)
+- Gallery management for storing known identities
+- Temporal consistency checking
+- Cross-camera matching capability
+
+**Gallery Structure**:
+```
+Gallery = {
+    'gid': int,
+    'features': List[np.array],
+    'last_seen': timestamp,
+    'camera_history': List[int],
+    'track_history': List[int]
+}
+```
+
+### 2.6 Global ID Management System
+**Purpose**: Assign and maintain Global IDs (GIDs) across multiple cameras
+
+**Core Functions**:
+- GID assignment for new persons
+- GID merging when same person appears in different cameras
+- GID persistence across video sessions
+- Confidence-based GID updates
+- Gallery pruning for memory management
+
+**GID Assignment Logic**:
+1. New detection → Extract features
+2. Compare with existing gallery
+3. If similarity > threshold → Assign existing GID
+4. If similarity < threshold → Create new GID
+5. Update gallery with new features
+
+## 3. System Integration
+
+### 3.1 Processing Pipeline
+1. **Frame Acquisition**: Read frames from all video sources
+2. **Batch Detection**: Process frames through YOLOv8m
+3. **Tracking Update**: Update ByteTrack with new detections
+4. **Feature Extraction**: Extract OSNet features for valid tracks
+5. **Re-ID Matching**: Match features against gallery
+6. **GID Assignment**: Assign or update Global IDs
+7. **Output Generation**: Generate tracking results with GIDs
+
+### 3.2 Multi-Camera Synchronization
+- Frame timestamp alignment
+- Cross-camera feature matching
+- GID consistency across cameras
+- Temporal window for cross-camera associations
+
+### 3.3 Performance Optimization
+- GPU memory pooling for efficient inference
+- Batch processing for detection and feature extraction
+- Multi-threading for video I/O
+- Configurable processing frequency
+- Memory-efficient gallery management
+
+## 4. Configuration Management
+
+### 4.1 Model Configuration
+```yaml
+detection:
+  model_path: "yolov8m.pt"
+  confidence_threshold: 0.5
+  device: "cuda:0"  # or "cpu"
+  
+tracking:
+  track_thresh: 0.5
+  track_buffer: 30
+  match_thresh: 0.8
+  
+reid:
+  model_path: "osnet_x1_0.pth"
+  similarity_threshold: 0.7
+  gallery_size: 1000
+  feature_dim: 512
+```
+
+### 4.2 System Configuration
+```yaml
+system:
+  num_cameras: 2
+  batch_size: 4
+  frame_skip: 1
+  gpu_memory_fraction: 0.8
+  output_format: "json"
+```
+
+## 5. Error Handling & Robustness
+
+### 5.1 Error Scenarios
+- Video file corruption or end-of-stream
+- GPU memory overflow
+- Model loading failures
+- Network interruptions (if applicable)
+
+### 5.2 Recovery Mechanisms
+- Automatic fallback to CPU processing
+- Graceful degradation with reduced batch sizes
+- Model reloading on failures
+- Checkpoint saving for long-running processes
+
+## 6. Output Format
+
+### 6.1 Real-time Output
+```json
+{
+  "frame_id": 1234,
+  "timestamp": "2024-01-20T10:30:45",
+  "camera_id": 1,
+  "detections": [
+    {
+      "gid": 15,
+      "track_id": 7,
+      "bbox": [100, 200, 300, 600],
+      "confidence": 0.89,
+      "features": [0.1, 0.2, ...],
+      "is_new": false
+    }
+  ]
+}
+```
+
+### 6.2 Summary Statistics
+- Total unique persons detected
+- Cross-camera matches
+- Processing performance metrics
+- Gallery statistics

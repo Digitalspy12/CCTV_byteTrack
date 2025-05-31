@@ -1,0 +1,53 @@
+# Person Re-Identification System Configuration
+
+# System Configuration
+system:
+  device: "auto"  # auto, cuda:0, cpu
+  num_cameras: 2
+  batch_size: 4
+  num_workers: 4
+  log_level: "DEBUG"
+  log_file: "logs/person_reid.log"
+  
+# Video Input Configuration
+video:
+  input_format: "mp4"
+  frame_skip: 0
+  resize_factor: 1.0
+  max_frame_buffer: 100
+  
+# Detection Configuration
+detection:
+  model_path: "models/yolov8m.pt"
+  confidence_threshold: 0.5
+  nms_threshold: 0.4
+  image_size: 640
+  half_precision: true
+  
+# Tracking Configuration
+tracking:
+  track_thresh: 0.5
+  track_buffer: 30
+  match_thresh: 0.7 # Lowered for better track continuity
+  temporal_window: 600  # Increased for longer track recovery window
+  
+# Re-ID Configuration
+reid:
+  model_path: "models/osnet_x1_0.pth"
+  similarity_threshold: 0.5 # Lowered for intra-video matching
+  gallery_size: 1000
+  feature_dim: 512
+  update_frequency: 10
+  max_features_per_person: 15 # Max features to store for averaging per person
+  merge_threshold: 0.6 # Threshold for merging GIDs during online processing
+  merge_check_interval: 60 # Seconds, how often to check for GID merges
+  offline_similarity_threshold: 0.75 # Threshold for merging GIDs during offline processing
+  
+# Output Configuration
+output:
+  save_results: true
+  output_format: "json"
+  visualization: true
+  video_output: true
+  headless_mode: false  # Set to true when running in environments without a display (e.g., Google Colab, AWS)
+  gallery_save_path: "data/gallery/" # Path to save person crops for gallery
