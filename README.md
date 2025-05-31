@@ -43,10 +43,10 @@ Video Input → Person Detection → Object Tracking → Feature Extraction → 
    # Download OSNet model
    wget -P models/ https://github.com/KaiyangZhou/deep-person-reid/releases/download/v1.0.0/osnet_x1_0_market1501.pth
    ```
-## TO RUN USING STREAMLIT 
-'''
+### TO RUN USING STREAMLIT 
+```
 streamlit run app.py
-'''
+```
 ## Usage
 
 ### Basic Usage
